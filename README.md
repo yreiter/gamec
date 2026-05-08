@@ -1,0 +1,2 @@
+# gamec
+Claude Game
