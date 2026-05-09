@@ -8,17 +8,19 @@
 * { margin:0; padding:0; box-sizing:border-box; }
 body {
   background:#000;
-  display:flex;
-  flex-direction:column;
-  align-items:center;
-  justify-content:center;
-  min-height:100vh;
   font-family:'Courier New',monospace;
   overflow:hidden;
   user-select:none;
   -webkit-user-select:none;
+  touch-action:none;
 }
-#gameCanvas { display:block; cursor:none; }
+#gameCanvas {
+  display:block;
+  width:100vw !important;
+  height:100vh !important;
+  position:fixed; top:0; left:0;
+  cursor:none;
+}
 
 /* ── HUD ─────────────────────────────────────────────────────────────── */
 #ui {
@@ -273,9 +275,9 @@ const canvas = document.getElementById('gameCanvas');
 const ctx    = canvas.getContext('2d');
 
 function resize() {
-  const s = Math.min(window.innerWidth, window.innerHeight * 0.98, 700);
-  canvas.width  = Math.floor(s * 0.75);
-  canvas.height = Math.floor(s);
+  canvas.width  = window.innerWidth;
+  canvas.height = window.innerHeight;
+  if (stars.length) initStars();
 }
 resize();
 window.addEventListener('resize', resize);
@@ -661,7 +663,8 @@ function spawnExplosion(x,y,color,count=20,big=false) {
 // INPUT
 // ═══════════════════════════════════════════════════════════════════════════
 const keys={};
-let mouseX=-1, mouseDown=false;
+let mouseX=-1, touchY=-1, mouseDown=false;
+const isTouchDevice = () => window.matchMedia('(pointer:coarse)').matches;
 
 window.addEventListener('keydown', e=>{
   keys[e.code]=true;
@@ -678,15 +681,20 @@ canvas.addEventListener('mouseup', ()=>{ mouseDown=false; });
 canvas.addEventListener('touchmove', e=>{
   e.preventDefault();
   const r=canvas.getBoundingClientRect();
-  mouseX=(e.touches[0].clientX-r.left)*(canvas.width/r.width);
+  const t=e.touches[0];
+  mouseX=(t.clientX-r.left)*(canvas.width/r.width);
+  touchY=(t.clientY-r.top)*(canvas.height/r.height);
 },{passive:false});
 canvas.addEventListener('touchstart', e=>{
+  e.preventDefault();
   mouseDown=true;
   const r=canvas.getBoundingClientRect();
-  mouseX=(e.touches[0].clientX-r.left)*(canvas.width/r.width);
+  const t=e.touches[0];
+  mouseX=(t.clientX-r.left)*(canvas.width/r.width);
+  touchY=(t.clientY-r.top)*(canvas.height/r.height);
   if (gameState==='playing') doShoot();
-});
-canvas.addEventListener('touchend', ()=>{ mouseDown=false; });
+},{passive:false});
+canvas.addEventListener('touchend', ()=>{ mouseDown=false; touchY=-1; });
 
 function doShoot() {
   if (player.shootCooldown>0) return;
@@ -824,9 +832,16 @@ function update(dt) {
   if (keys['ArrowRight']||keys['KeyD']) player.x+=player.spd*1.8*dt;
   if (keys['ArrowUp']||keys['KeyW'])   player.y-=player.spd*dt;
   if (keys['ArrowDown']||keys['KeyS']) player.y+=player.spd*dt;
-  if (mouseX>=0) player.x+=( mouseX-player.x)*0.12*dt;
+  if (mouseX>=0) player.x+=(mouseX-player.x)*0.15*dt;
+  // on touch devices, follow finger Y (keep ship in lower 60% so enemies stay visible)
+  if (touchY>=0 && isTouchDevice()) {
+    const targetY = Math.min(touchY, canvas.height*0.9);
+    player.y+=(targetY-player.y)*0.15*dt;
+  }
 
-  if (mouseDown||keys['Space']) doShoot();
+  // auto-shoot on touch (finger held down)
+  if (mouseDown && isTouchDevice()) doShoot();
+  else if (keys['Space']) doShoot();
 
   player.x=Math.max(player.w/2, Math.min(canvas.width-player.w/2, player.x));
   player.y=Math.max(player.h/2, Math.min(canvas.height-player.h/2, player.y));
